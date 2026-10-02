@@ -6,8 +6,11 @@ import { getTeams } from '../../services/teamsService';
 import { GlassModal } from '../../components/ui/GlassModal';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { CustomSwitch } from '../../components/ui/CustomSwitch';
+import { CustomDatePicker } from '../../components/ui/CustomDatePicker';
+import { CustomTimePicker } from '../../components/ui/CustomTimePicker';
 import { Button } from '../../components/ui/Button';
-import { Search, Edit2, Trash2, ExternalLink, Plus, Minus, Calendar, Clock } from 'lucide-react';
+import { AdminLineupEditor } from '../../features/matches/components/AdminLineupEditor';
+import { Search, Edit2, Trash2, ExternalLink, Plus, Minus } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
 export const AdminMatchesTab: React.FC = () => {
@@ -38,10 +41,18 @@ export const AdminMatchesTab: React.FC = () => {
 
   const save = async () => {
     const dataToSave = { ...current };
+    if (!dataToSave.tournament_id || dataToSave.tournament_id === '') {
+      dataToSave.tournament_id = undefined; // it will be sanitized to null
+    }
     if (isWO) {
       dataToSave.home_score = 3;
       dataToSave.away_score = 0;
       dataToSave.status = 'played';
+    }
+    if (!dataToSave.description && !dataToSave.title) {
+      const h = teams.find(t=>t.id===current.home_team_id)?.name || 'Local';
+      const a = teams.find(t=>t.id===current.away_team_id)?.name || 'Visitante';
+      dataToSave.description = `${h} vs ${a}`;
     }
     try {
       if (dataToSave.id) await updateMatch(dataToSave.id, dataToSave);
@@ -49,8 +60,8 @@ export const AdminMatchesTab: React.FC = () => {
       setModalOpen(false);
       fetchAll();
       toast('Partido guardado exitosamente', 'success');
-    } catch (e) {
-      toast('Error al guardar el partido', 'error');
+    } catch (e: any) {
+      toast(`Error al guardar el partido: ${e?.message || 'Desconocido'}`, 'error');
     }
   };
 
@@ -75,6 +86,13 @@ export const AdminMatchesTab: React.FC = () => {
       return matchTournament && matchSearch;
     });
   }, [matches, filterTournament, searchQuery, teams]);
+
+  const parsedLineups = useMemo(() => {
+    if (typeof current.lineups === 'string') {
+      try { return JSON.parse(current.lineups); } catch { return { home: { starting: [], substitutes: [] }, away: { starting: [], substitutes: [] } }; }
+    }
+    return current.lineups || { home: { starting: [], substitutes: [] }, away: { starting: [], substitutes: [] } };
+  }, [current.lineups]);
 
   const getTeamLogo = (teamId: string) => {
     const team = teams.find(t => t.id === teamId);
@@ -164,7 +182,24 @@ export const AdminMatchesTab: React.FC = () => {
         <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar pb-4">
           {modalTab === 'schedule' && (
             <div className="space-y-6">
-              <CustomSelect options={tournaments.map(t=>({value:t.id,label:t.name}))} value={current.tournament_id||''} onChange={v=>setCurrent({...current, tournament_id:v})} placeholder="Torneo" />
+              <CustomSelect options={[{value: '', label: 'Partido Amistoso / Libre (Sin Torneo)'}, ...tournaments.map(t=>({value:t.id,label:t.name}))]} value={current.tournament_id||''} onChange={v=>setCurrent({...current, tournament_id:v})} placeholder="Selecciona un Torneo..." />
+              
+              <div className="space-y-2 mt-4">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Nombre / Etiqueta del Partido (Opcional)</label>
+                  <button 
+                    onClick={() => {
+                      const h = teams.find(t=>t.id===current.home_team_id)?.name || 'Local';
+                      const a = teams.find(t=>t.id===current.away_team_id)?.name || 'Visitante';
+                      setCurrent({...current, title: `${h} vs ${a}`});
+                    }}
+                    className="text-[10px] text-primary hover:text-white transition-colors"
+                  >
+                    Usar nombres de equipos
+                  </button>
+                </div>
+                <input type="text" placeholder='Ej. "Fecha 1: Equipo A vs Equipo B"' className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={current.title||current.description||''} onChange={e=>setCurrent({...current, title:e.target.value, description:e.target.value})} />
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <CustomSelect options={teams.map(t=>({value:t.id,label:t.name}))} value={current.home_team_id||''} onChange={v=>setCurrent({...current, home_team_id:v})} placeholder="Local" />
@@ -172,14 +207,8 @@ export const AdminMatchesTab: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type="date" className="w-full bg-white/[0.05] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={current.date||''} onChange={e=>setCurrent({...current, date:e.target.value})} />
-                </div>
-                <div className="relative">
-                  <Clock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input type="time" className="w-full bg-white/[0.05] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={current.time||''} onChange={e=>setCurrent({...current, time:e.target.value})} />
-                </div>
+                <CustomDatePicker value={current.date||''} onChange={v=>setCurrent({...current, date:v})} placeholder="Fecha" />
+                <CustomTimePicker value={current.time||''} onChange={v=>setCurrent({...current, time:v})} />
                 <input type="text" placeholder="Cancha" className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={current.location_id||''} onChange={e=>setCurrent({...current, location_id:e.target.value})} />
               </div>
             </div>
@@ -269,12 +298,12 @@ export const AdminMatchesTab: React.FC = () => {
                 <textarea placeholder="Notas internas o resumen..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors h-32 resize-none" value={current.description||''} onChange={e=>setCurrent({...current, description:e.target.value})} />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Incidencias (JSON)</label>
-                <textarea 
-                  placeholder='{"home": {"starting": []}, "away": {"starting": []}}' 
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-mono outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors h-32 resize-none" 
-                  value={typeof current.lineups === 'string' ? current.lineups : JSON.stringify(current.lineups || {}, null, 2)} 
-                  onChange={e => setCurrent({...current, lineups: e.target.value})} 
+                <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Alineaciones y Sucesos (Visual Editor)</label>
+                <AdminLineupEditor 
+                  lineups={parsedLineups as any}
+                  onChange={(v) => setCurrent({...current, lineups: v})}
+                  homeTeamName={teams.find(t=>t.id===current.home_team_id)?.name || 'Local'}
+                  awayTeamName={teams.find(t=>t.id===current.away_team_id)?.name || 'Visitante'}
                 />
               </div>
             </div>

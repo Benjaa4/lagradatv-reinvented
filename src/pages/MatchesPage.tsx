@@ -1,24 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Match } from '../types';
+import { Match, Team } from '../types';
 import { getMatches } from '../services/matchesService';
+import { getTeams } from '../services/teamsService';
 import { GlassCard } from '../components/ui/GlassCard';
 import { MatchStatusBadge } from '../components/ui/MatchStatusBadge';
 import { Button } from '../components/ui/Button';
 
 export const MatchesPage: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [filter, setFilter] = useState<'all' | 'live' | 'scheduled' | 'played'>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getMatches().then(data => {
-      setMatches(data);
+    Promise.all([getMatches(), getTeams()]).then(([matchesData, teamsData]) => {
+      setMatches(matchesData);
+      setTeams(teamsData);
       setIsLoading(false);
     });
   }, []);
 
   const filteredMatches = matches.filter(m => filter === 'all' || m.status === filter);
+
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
 
   return (
     <div className="space-y-8 animate-in fade-in max-w-7xl mx-auto">
@@ -41,7 +46,10 @@ export const MatchesPage: React.FC = () => {
         </GlassCard>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMatches.map(match => (
+          {filteredMatches.map(match => {
+            const homeTeam = getTeam(match.home_team_id);
+            const awayTeam = getTeam(match.away_team_id);
+            return (
             <GlassCard key={match.id} className={`p-6 transition-all duration-200 active:scale-[0.98] md:hover:bg-white/[0.06] md:hover:border-white/20 ${match.status === 'live' ? 'border-red-500/20 shadow-[0_0_24px_-8px_rgba(239,68,68,0.35)]' : ''}`}>
               <div className="flex justify-between items-center mb-4">
                 <MatchStatusBadge 
@@ -54,15 +62,23 @@ export const MatchesPage: React.FC = () => {
               
               <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 my-6">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-white/10 shrink-0" />
-                  <span className="truncate min-w-0 flex-1 text-sm font-medium text-white" title={match.home_team_id}>{match.home_team_id}</span>
+                  {homeTeam?.logo ? (
+                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain shrink-0 drop-shadow-md" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-white/10 shrink-0 flex items-center justify-center font-bold text-xs">{homeTeam?.shortName || homeTeam?.name.substring(0, 3)}</div>
+                  )}
+                  <span className="truncate min-w-0 flex-1 text-sm font-medium text-white" title={homeTeam?.name || match.home_team_id}>{homeTeam?.name || match.home_team_id}</span>
                 </div>
                 <div className="tabular-nums font-semibold text-xl sm:text-3xl px-2 sm:px-4 text-center min-w-[3.5rem] text-primary bg-primary/10 rounded-xl py-2 border border-primary/20 shadow-inner">
                   {match.status === 'scheduled' ? 'VS' : `${match.home_score} - ${match.away_score}`}
                 </div>
                 <div className="flex items-center gap-2 min-w-0 flex-row-reverse text-right">
-                  <div className="w-8 h-8 rounded-full bg-white/10 shrink-0" />
-                  <span className="truncate min-w-0 flex-1 text-sm font-medium text-white" title={match.away_team_id}>{match.away_team_id}</span>
+                  {awayTeam?.logo ? (
+                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain shrink-0 drop-shadow-md" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-white/10 shrink-0 flex items-center justify-center font-bold text-xs">{awayTeam?.shortName || awayTeam?.name.substring(0, 3)}</div>
+                  )}
+                  <span className="truncate min-w-0 flex-1 text-sm font-medium text-white" title={awayTeam?.name || match.away_team_id}>{awayTeam?.name || match.away_team_id}</span>
                 </div>
               </div>
 
@@ -77,7 +93,8 @@ export const MatchesPage: React.FC = () => {
                 )}
               </div>
             </GlassCard>
-          ))}
+            );
+          })}
           {filteredMatches.length === 0 && (
             <GlassCard className="col-span-full p-12 text-center">
               <p className="text-gray-400 text-lg">No hay partidos para este filtro.</p>

@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Album, Video, Match } from '../../types';
+import { Album, Video, Match, Team } from '../../types';
 import { getAlbums, createAlbum, updateAlbum, deleteAlbum, getVideos, createVideo, updateVideo, deleteVideo } from '../../services/videosService';
 import { getMatches } from '../../services/matchesService';
+import { getTeams } from '../../services/teamsService';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Button } from '../../components/ui/Button';
 import { GlassModal } from '../../components/ui/GlassModal';
 import { CustomSelect } from '../../components/ui/CustomSelect';
+import { CustomDatePicker } from '../../components/ui/CustomDatePicker';
 import { Plus, Edit2, Trash2, Video as VideoIcon, Image as ImageIcon, Link as LinkIcon, Folder } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 export const AdminMediaTab: React.FC = () => {
+  const { toast } = useToast();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [isAlbumModalOpen, setAlbumModalOpen] = useState(false);
   const [isVideoModalOpen, setVideoModalOpen] = useState(false);
   const [currentAlbum, setCurrentAlbum] = useState<Partial<Album>>({});
@@ -21,14 +26,46 @@ export const AdminMediaTab: React.FC = () => {
     getAlbums().then(setAlbums);
     getVideos().then(setVideos);
     getMatches().then(setMatches);
+    getTeams().then(setTeams);
   };
   useEffect(() => { fetchAll(); }, []);
 
   const openAlbumModal = (a?: Album) => { setCurrentAlbum(a || { title: '', date: '' }); setAlbumModalOpen(true); };
-  const openVideoModal = (v?: Video) => { setCurrentVideo(v || { title: '', date: new Date().toISOString().split('T')[0], type: 'Transmisión Completa', views: 0 }); setVideoModalOpen(true); };
+  const openVideoModal = (v?: Video) => { setCurrentVideo(v || { title: '', date: new Date().toISOString().split('T')[0], type: 'recording', views: 0 }); setVideoModalOpen(true); };
 
-  const saveAlbum = async () => { if (currentAlbum.id) await updateAlbum(currentAlbum.id, currentAlbum); else await createAlbum(currentAlbum as Album); setAlbumModalOpen(false); fetchAll(); };
-  const saveVideo = async () => { if (currentVideo.id) await updateVideo(currentVideo.id, currentVideo); else await createVideo(currentVideo as Video); setVideoModalOpen(false); fetchAll(); };
+  const saveAlbum = async () => { 
+    try {
+      if (currentAlbum.id) await updateAlbum(currentAlbum.id, currentAlbum); 
+      else await createAlbum(currentAlbum as Album); 
+      setAlbumModalOpen(false); 
+      fetchAll(); 
+      toast('Guardado correctamente', 'success');
+    } catch (e: any) {
+      toast(e?.message || 'Error al guardar', 'error');
+    }
+  };
+  const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const saveVideo = async () => { 
+    try {
+      let vData = { ...currentVideo };
+      if (!vData.thumbnail && vData.url) {
+        const ytId = getYouTubeId(vData.url);
+        if (ytId) vData.thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+      }
+      if (vData.id) await updateVideo(vData.id, vData); 
+      else await createVideo(vData as Video); 
+      setVideoModalOpen(false); 
+      fetchAll(); 
+      toast('Guardado correctamente', 'success');
+    } catch (e: any) {
+      toast(e?.message || 'Error al guardar', 'error');
+    }
+  };
 
   return (
     <div className="space-y-12 animate-in fade-in">
@@ -119,7 +156,7 @@ export const AdminMediaTab: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
              <div>
                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">Fecha</label>
-               <input type="date" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={currentAlbum.date||''} onChange={e=>setCurrentAlbum({...currentAlbum, date:e.target.value})} />
+               <CustomDatePicker value={currentAlbum.date||''} onChange={v=>setCurrentAlbum({...currentAlbum, date:v})} />
              </div>
           </div>
           <div>
@@ -146,22 +183,30 @@ export const AdminMediaTab: React.FC = () => {
               <input type="text" placeholder="https://..." className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={currentVideo.url||''} onChange={e=>setCurrentVideo({...currentVideo, url:e.target.value})} />
             </div>
           </div>
+          <div>
+            <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">URL Portada / Miniatura (Opcional)</label>
+            <input type="text" placeholder="Deja vacío para auto-extraer de YouTube" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={currentVideo.thumbnail||''} onChange={e=>setCurrentVideo({...currentVideo, thumbnail:e.target.value})} />
+          </div>
           
           <div className="grid grid-cols-2 gap-4">
              <div>
                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">Clasificación</label>
-               <CustomSelect options={[{value:'Transmisión Completa',label:'Transmisión Completa'}, {value:'Resumen',label:'Resumen'}, {value:'Mejores Jugadas',label:'Mejores Jugadas'}]} value={currentVideo.type||'Transmisión Completa'} onChange={v=>setCurrentVideo({...currentVideo, type:v})} />
+               <CustomSelect options={[{value:'live',label:'Transmisión En Vivo'}, {value:'recording',label:'Grabación / Partido Completo'}]} value={currentVideo.type||'recording'} onChange={v=>setCurrentVideo({...currentVideo, type:v})} />
              </div>
              <div>
                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">Fecha</label>
-               <input type="date" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors" value={currentVideo.date||''} onChange={e=>setCurrentVideo({...currentVideo, date:e.target.value})} />
+               <CustomDatePicker value={currentVideo.date||''} onChange={v=>setCurrentVideo({...currentVideo, date:v})} />
              </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
              <div>
                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">Vincular a un Partido (Opcional)</label>
-               <CustomSelect options={[{value:'',label:'Ninguno'}, ...matches.map(m=>({value:m.id,label:`${m.home_team_id} vs ${m.away_team_id}`}))]} value={currentVideo.match_id||''} onChange={v=>setCurrentVideo({...currentVideo, match_id:v})} placeholder="Seleccionar partido..." />
+               <CustomSelect options={[{value:'',label:'Ninguno'}, ...matches.map(m=>{
+                 const ht = teams.find(t => t.id === m.home_team_id)?.name || m.home_team_id;
+                 const at = teams.find(t => t.id === m.away_team_id)?.name || m.away_team_id;
+                 return {value:m.id,label:`${ht} vs ${at} (${m.date})`};
+               })]} value={currentVideo.match_id||''} onChange={v=>setCurrentVideo({...currentVideo, match_id:v})} placeholder="Seleccionar partido..." />
              </div>
              <div>
                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-1 block">Asignar a Álbum (Opcional)</label>

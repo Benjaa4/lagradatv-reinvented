@@ -22,6 +22,7 @@ export interface Tournament {
 export interface TeamStanding {
   id: string;
   tournament_id: string;
+  team_id?: string;
   name: string;
   played: number;
   won: number;
@@ -41,6 +42,7 @@ export interface TeamStanding {
 
 export interface Match {
   id: string;
+  title?: string;
   tournament_id: string;
   home_team_id: string;
   away_team_id: string;
@@ -77,6 +79,7 @@ export interface LineupPlayer {
   yellowCards: number;
   redCards: number;
   priorYellowCount: number;
+  goals?: number;
 }
 
 export interface TeamLineup {
@@ -145,3 +148,5 @@ export interface GlobalTeam {
   is_global: boolean;
   players?: Player[];
 }
+
+export type Team = GlobalTeam;

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Tournament, Match } from '../types';
+import { Tournament, Match, Team } from '../types';
 import { getTournamentById } from '../services/tournamentsService';
 import { getMatches } from '../services/matchesService';
+import { getTeams } from '../services/teamsService';
 import { processBracketMatches, BracketPhase } from '../utils/bracketUtils';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StandingsSkeleton } from '../components/ui/Skeleton';
@@ -12,8 +13,18 @@ export const TournamentDetailPage: React.FC = () => {
   const { id } = useParams<{id: string}>();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [activeTab, setActiveTab] = useState<'standings' | 'brackets' | 'scorers' | 'discipline'>('standings');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+
+  const isTeamDisqualified = (teamId: string) => {
+    if (teamId === 'TBD' || !tournament?.standings) return false;
+    const teamName = getTeam(teamId)?.name || teamId;
+    const standing = tournament.standings.find(s => s.name === teamName);
+    return standing?.disqualified || false;
+  };
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -39,8 +50,53 @@ export const TournamentDetailPage: React.FC = () => {
         }
       });
       getMatches().then(m => setMatches(m.filter(x => x.tournament_id === id)));
+      getTeams().then(t => setTeams(t));
     }
   }, [id]);
+
+  const { scorers, discipline } = React.useMemo(() => {
+    if (!tournament) return { scorers: [], discipline: [] };
+    const s: Record<string, {name: string, team: string, goals: number, teamId: string}> = {};
+    const d: Record<string, {name: string, team: string, yellow: number, red: number, teamId: string}> = {};
+
+    matches.forEach(m => {
+      let lineups: any = null;
+      if (typeof m.lineups === 'string') {
+         try { lineups = JSON.parse(m.lineups); } catch {}
+      } else {
+         lineups = m.lineups;
+      }
+      
+      if (!lineups) return;
+      
+      const homeTeam = getTeam(m.home_team_id)?.name || m.home_team_id;
+      const awayTeam = getTeam(m.away_team_id)?.name || m.away_team_id;
+
+      const processTeam = (teamLineup: any, teamName: string, teamId: string) => {
+        if (!teamLineup) return;
+        const players = [...(teamLineup.starting || []), ...(teamLineup.substitutes || [])];
+        players.forEach((p: any) => {
+          if (p.goals > 0) {
+            if (!s[p.id]) s[p.id] = { name: p.name || p.fullName || 'Jugador', team: teamName, goals: 0, teamId };
+            s[p.id].goals += p.goals;
+          }
+          if (p.yellowCards > 0 || p.redCards > 0) {
+            if (!d[p.id]) d[p.id] = { name: p.name || p.fullName || 'Jugador', team: teamName, yellow: 0, red: 0, teamId };
+            d[p.id].yellow += (p.yellowCards || 0);
+            d[p.id].red += (p.redCards || 0);
+          }
+        });
+      };
+
+      processTeam(lineups.home, homeTeam, m.home_team_id);
+      processTeam(lineups.away, awayTeam, m.away_team_id);
+    });
+
+    return {
+      scorers: Object.values(s).sort((a,b) => b.goals - a.goals),
+      discipline: Object.values(d).sort((a,b) => (b.red*3 + b.yellow) - (a.red*3 + a.yellow))
+    };
+  }, [matches, teams, tournament]);
 
   if (!tournament) return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-1 duration-150 max-w-7xl mx-auto pt-8">
@@ -49,6 +105,8 @@ export const TournamentDetailPage: React.FC = () => {
   );
 
   const bracketPhases: BracketPhase[] = processBracketMatches(matches);
+
+
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-1 duration-150 max-w-7xl mx-auto">
@@ -85,16 +143,17 @@ export const TournamentDetailPage: React.FC = () => {
           <GlassCard className="p-4 md:p-6">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="text-gray-400 uppercase text-xs sticky top-[var(--nav-h,4rem)] z-20 bg-[rgba(18,22,34,0.75)] backdrop-blur-md border-b border-white/10 after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-gradient-to-b after:from-[rgba(18,22,34,0.6)] after:to-transparent after:pointer-events-none">
+                <thead className="bg-white/[0.04] border-b border-white/10 text-gray-400 uppercase text-xs tracking-wider">
                   <tr>
                     <th className="py-3 px-3 font-bold">Pos</th>
-                    <th className="py-3 px-3 w-full font-bold">Equipo</th>
+                    <th className="py-3 px-3 min-w-[140px] font-bold">Equipo</th>
                     <th className="py-3 px-3 text-center font-bold">PJ</th>
                     <th className="py-3 px-3 text-center font-bold hidden sm:table-cell">G</th>
                     <th className="py-3 px-3 text-center font-bold hidden sm:table-cell">E</th>
                     <th className="py-3 px-3 text-center font-bold hidden sm:table-cell">P</th>
                     <th className="py-3 px-3 text-center font-bold hidden md:table-cell">GF</th>
                     <th className="py-3 px-3 text-center font-bold hidden md:table-cell">GC</th>
+                    <th className="py-3 px-3 text-center font-bold hidden md:table-cell">DIF</th>
                     <th className="py-3 px-4 text-center text-white font-black text-base">PTS</th>
                   </tr>
                 </thead>
@@ -103,9 +162,10 @@ export const TournamentDetailPage: React.FC = () => {
                     <React.Fragment key={team.id}>
                       <tr onClick={() => toggleRow(team.id)} className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer md:cursor-default">
                         <td className={`py-4 px-3 font-black text-lg ${idx<3?'text-primary':'text-gray-500'}`}>{idx+1}</td>
-                        <td className="py-4 px-3 text-white font-bold max-w-[120px] sm:max-w-none truncate" title={team.name}>
+                        <td className="py-4 px-3 text-white font-bold max-w-[120px] sm:max-w-none truncate" title={getTeam(team.id)?.name || team.name}>
                           <div className="flex items-center gap-2">
-                            {team.name}
+                            {getTeam(team.id)?.logo ? <img src={getTeam(team.id)?.logo} alt="" className="w-6 h-6 object-contain drop-shadow" /> : null}
+                            {getTeam(team.id)?.name || team.name}
                             <ChevronDown className={`w-4 h-4 text-gray-500 md:hidden transition-transform ${expandedRows.has(team.id) ? 'rotate-180' : ''}`} />
                           </div>
                         </td>
@@ -115,11 +175,12 @@ export const TournamentDetailPage: React.FC = () => {
                         <td className="py-4 px-3 text-center text-red-400 font-medium hidden sm:table-cell">{team.lost}</td>
                         <td className="py-4 px-3 text-center text-gray-400 hidden md:table-cell">{team.goals_for}</td>
                         <td className="py-4 px-3 text-center text-gray-400 hidden md:table-cell">{team.goals_against}</td>
+                        <td className="py-4 px-3 text-center text-gray-400 hidden md:table-cell">{(team.goals_for || 0) - (team.goals_against || 0)}</td>
                         <td className="py-4 px-4 text-center text-primary font-black text-lg bg-primary/10 rounded-r-lg">{team.points}</td>
                       </tr>
                       {expandedRows.has(team.id) && (
                         <tr className="md:hidden bg-white/[0.02] border-b border-white/5">
-                          <td colSpan={9} className="px-3 py-4">
+                          <td colSpan={10} className="px-3 py-4">
                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 text-center text-xs">
                               <div className="bg-black/30 p-2 rounded-lg sm:hidden"><span className="block text-gray-500 uppercase tracking-widest font-bold mb-1">G</span><span className="text-emerald-400 font-medium">{team.won}</span></div>
                               <div className="bg-black/30 p-2 rounded-lg sm:hidden"><span className="block text-gray-500 uppercase tracking-widest font-bold mb-1">E</span><span className="text-gray-400 font-medium">{team.drawn}</span></div>
@@ -135,7 +196,7 @@ export const TournamentDetailPage: React.FC = () => {
                   ))}
                   {(!tournament.standings || tournament.standings.length===0) && (
                     <tr>
-                      <td colSpan={9} className="text-center py-16">
+                      <td colSpan={10} className="text-center py-16">
                         <div className="flex flex-col items-center justify-center opacity-50">
                           <p className="text-white text-lg">Sin registros disponibles</p>
                         </div>
@@ -153,20 +214,31 @@ export const TournamentDetailPage: React.FC = () => {
             {bracketPhases.length > 0 ? bracketPhases.map((phase) => (
               <div key={phase.name} className="min-w-[280px] sm:min-w-[320px] flex flex-col gap-4 snap-center">
                 <h3 className="text-center text-primary font-bold uppercase tracking-widest text-sm mb-2">{phase.name}</h3>
-                {phase.matches.map(m => (
+                {phase.matches.map(m => {
+                  const homeDesc = isTeamDisqualified(m.home_team_id);
+                  const awayDesc = isTeamDisqualified(m.away_team_id);
+                  return (
                   <GlassCard key={m.id} className="p-4 border-l-4 border-l-primary/60 relative hover:border-l-primary transition-colors">
                     <div className="space-y-3 text-sm font-medium">
                       <div className="flex justify-between items-center text-white">
-                        <span className="truncate pr-2">{m.home_team_id}</span>
+                        <div className={`flex items-center gap-2 truncate pr-2 ${homeDesc ? 'line-through text-rose-400/80' : ''}`}>
+                          {getTeam(m.home_team_id)?.logo ? <img src={getTeam(m.home_team_id)?.logo} className="w-5 h-5 object-contain drop-shadow" /> : null}
+                          {homeDesc && <span className="bg-rose-500/20 text-rose-400 text-[8px] px-1 rounded-sm no-underline inline-block">DESC</span>}
+                          <span className="truncate">{getTeam(m.home_team_id)?.shortName || getTeam(m.home_team_id)?.name || m.home_team_id}</span>
+                        </div>
                         <span className={`px-2 py-0.5 rounded bg-white/5 ${m.home_score > m.away_score ? 'text-primary font-bold' : ''}`}>{m.status !== 'scheduled' ? m.home_score : '-'}</span>
                       </div>
                       <div className="flex justify-between items-center text-white">
-                        <span className="truncate pr-2">{m.away_team_id}</span>
+                        <div className={`flex items-center gap-2 truncate pr-2 ${awayDesc ? 'line-through text-rose-400/80' : ''}`}>
+                          {getTeam(m.away_team_id)?.logo ? <img src={getTeam(m.away_team_id)?.logo} className="w-5 h-5 object-contain drop-shadow" /> : null}
+                          {awayDesc && <span className="bg-rose-500/20 text-rose-400 text-[8px] px-1 rounded-sm no-underline inline-block">DESC</span>}
+                          <span className="truncate">{getTeam(m.away_team_id)?.shortName || getTeam(m.away_team_id)?.name || m.away_team_id}</span>
+                        </div>
                         <span className={`px-2 py-0.5 rounded bg-white/5 ${m.away_score > m.home_score ? 'text-primary font-bold' : ''}`}>{m.status !== 'scheduled' ? m.away_score : '-'}</span>
                       </div>
                     </div>
                   </GlassCard>
-                ))}
+                )})}
               </div>
             )) : (
               <GlassCard className="w-full text-center py-16">
@@ -179,17 +251,83 @@ export const TournamentDetailPage: React.FC = () => {
         )}
 
         {activeTab === 'scorers' && tournament.show_scorers && (
-          <GlassCard className="p-12 text-center">
-            <div className="flex flex-col items-center justify-center opacity-50">
-              <p className="text-white text-lg">Sin registros disponibles</p>
+          <GlassCard className="p-4 md:p-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap text-white">
+                <thead className="bg-white/[0.04] border-b border-white/10 text-gray-400 uppercase text-xs tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4 font-bold">Pos</th>
+                    <th className="py-3 px-4 font-bold">Jugador</th>
+                    <th className="py-3 px-4 font-bold">Equipo</th>
+                    <th className="py-3 px-4 font-bold text-center">Goles</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {scorers.map((s, idx) => (
+                    <tr key={idx} className="hover:bg-white/5 transition-colors">
+                      <td className="py-3 px-4 text-gray-400">{idx + 1}</td>
+                      <td className="py-3 px-4 font-bold">{s.name}</td>
+                      <td className="py-3 px-4 text-gray-300 flex items-center gap-2">
+                        {getTeam(s.teamId)?.logo && <img src={getTeam(s.teamId)!.logo} alt="" className="w-4 h-4 object-contain" />}
+                        {s.team}
+                      </td>
+                      <td className="py-3 px-4 text-center font-bold text-primary text-lg">{s.goals}</td>
+                    </tr>
+                  ))}
+                  {scorers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-12 text-gray-500">No hay goles registrados.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </GlassCard>
         )}
 
         {activeTab === 'discipline' && tournament.show_discipline && (
-          <GlassCard className="p-12 text-center">
-            <div className="flex flex-col items-center justify-center opacity-50">
-              <p className="text-white text-lg">Sin registros disponibles</p>
+          <GlassCard className="p-4 md:p-6">
+             <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap text-white">
+                <thead className="bg-white/[0.04] border-b border-white/10 text-gray-400 uppercase text-xs tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4 font-bold">Pos</th>
+                    <th className="py-3 px-4 font-bold">Jugador</th>
+                    <th className="py-3 px-4 font-bold">Equipo</th>
+                    <th className="py-3 px-4 font-bold text-center">Amarillas</th>
+                    <th className="py-3 px-4 font-bold text-center">Rojas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {discipline.map((d, idx) => (
+                    <tr key={idx} className="hover:bg-white/5 transition-colors">
+                      <td className="py-3 px-4 text-gray-400">{idx + 1}</td>
+                      <td className="py-3 px-4 font-bold">{d.name}</td>
+                      <td className="py-3 px-4 text-gray-300 flex items-center gap-2">
+                        {getTeam(d.teamId)?.logo && <img src={getTeam(d.teamId)!.logo} alt="" className="w-4 h-4 object-contain" />}
+                        {d.team}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="w-3 h-4 bg-yellow-400 rounded-sm"></span>
+                          <span className="font-bold">{d.yellow}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="w-3 h-4 bg-red-500 rounded-sm"></span>
+                          <span className="font-bold">{d.red}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {discipline.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-12 text-gray-500">No hay tarjetas registradas.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </GlassCard>
         )}

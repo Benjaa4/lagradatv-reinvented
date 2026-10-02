@@ -6,7 +6,8 @@ import { CustomSelect } from '../../components/ui/CustomSelect';
 import { getSettings, saveSettings, AppSettings } from '../../services/settingsService';
 import { getTournaments, updateTournament } from '../../services/tournamentsService';
 import { getMatches, updateMatch } from '../../services/matchesService';
-import { Tournament, Match } from '../../types';
+import { getTeams } from '../../services/teamsService';
+import { Tournament, Match, Team } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { Settings, Image, Monitor, Trophy } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
@@ -15,6 +16,7 @@ export const AdminSettingsTab: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [featuredMatchId, setFeaturedMatchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,10 +24,11 @@ export const AdminSettingsTab: React.FC = () => {
   const { refreshSettings } = useSettings();
 
   useEffect(() => {
-    Promise.all([getSettings(), getTournaments(), getMatches()]).then(([s, t, m]) => {
+    Promise.all([getSettings(), getTournaments(), getMatches(), getTeams()]).then(([s, t, m, tData]) => {
       setSettings(s);
       setTournaments(t);
       setMatches(m);
+      setTeams(tData);
       const featured = m.find(match => match.is_featured);
       if (featured) setFeaturedMatchId(featured.id);
       setLoading(false);
@@ -74,7 +77,11 @@ export const AdminSettingsTab: React.FC = () => {
     </div>
   );
 
-  const matchOptions = [{ value: '', label: 'Ninguno' }, ...matches.map(m => ({ value: m.id, label: `${m.home_team_id} vs ${m.away_team_id} (${m.date})` }))];
+  const matchOptions = [{ value: '', label: 'Ninguno' }, ...matches.map(m => {
+    const ht = teams.find(t => t.id === m.home_team_id)?.name || m.home_team_id;
+    const at = teams.find(t => t.id === m.away_team_id)?.name || m.away_team_id;
+    return { value: m.id, label: `${ht} vs ${at} (${m.date})` };
+  })];
 
   return (
     <div className="space-y-8 animate-in fade-in">

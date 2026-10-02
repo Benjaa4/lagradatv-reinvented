@@ -91,7 +91,7 @@ export const LiveMatchesSection: React.FC = () => {
               <div className="pt-4 md:pt-6 mt-auto">
                 <Link to={`/partido/${match.id}`} className="w-full block">
                   <Button 
-                    variant={match.status === 'live' ? 'primary' : match.status === 'scheduled' ? 'glass' : 'ghost'} 
+                    variant={match.status === 'live' ? 'primary' : 'glass'} 
                     className="w-full"
                   >
                     {match.status === 'live' ? 'Ver Transmisión' : match.status === 'scheduled' ? 'Ver Detalles' : 'Resumen'}

@@ -1,6 +1,6 @@
 import { Match } from '../types';
 
-export type BracketPhaseName = 'Octavos de Final' | 'Cuartos de Final' | 'Semifinales' | 'Final';
+export type BracketPhaseName = 'Octavos de Final' | 'Cuartos de Final' | 'Semifinales' | 'Final' | 'Tercer Puesto';
 
 export interface BracketPhase {
   name: BracketPhaseName;
@@ -15,7 +15,8 @@ export function processBracketMatches(matches: Match[]): BracketPhase[] {
     'O': [], // O1-O8
     'C': [], // C1-C4
     'S': [], // S1-S2
-    'F': []  // F1
+    'F': [], // F1
+    'T': []  // T1
   };
 
   bracketMatches.forEach(match => {
@@ -39,6 +40,7 @@ export function processBracketMatches(matches: Match[]): BracketPhase[] {
     { name: 'Octavos de Final', codePrefix: 'O', matches: groups['O'] },
     { name: 'Cuartos de Final', codePrefix: 'C', matches: groups['C'] },
     { name: 'Semifinales', codePrefix: 'S', matches: groups['S'] },
+    { name: 'Tercer Puesto', codePrefix: 'T', matches: groups['T'] },
     { name: 'Final', codePrefix: 'F', matches: groups['F'] }
   ];
 

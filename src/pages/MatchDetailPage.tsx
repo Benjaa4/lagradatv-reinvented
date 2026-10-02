@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Match } from '../types';
+import { Match, Team } from '../types';
 import { getMatchById, subscribeToMatchUpdates } from '../services/matchesService';
+import { getTeams } from '../services/teamsService';
 import { ScoreboardBanner } from '../features/matches/components/ScoreboardBanner';
 import { TacticalPitch } from '../features/matches/components/TacticalPitch';
 import { DisciplinePanel } from '../features/matches/components/DisciplinePanel';
@@ -12,11 +13,15 @@ import { PitchSkeleton } from '../components/ui/Skeleton';
 export const MatchDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [match, setMatch] = useState<Match | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [activeTab, setActiveTab] = useState<'tactics' | 'discipline' | 'info'>('tactics');
 
   useEffect(() => {
     if (id) {
-      getMatchById(id).then(data => data && setMatch(data));
+      Promise.all([getMatchById(id), getTeams()]).then(([matchData, teamsData]) => {
+        if(matchData) setMatch(matchData);
+        setTeams(teamsData);
+      });
       
       const sub = subscribeToMatchUpdates(payload => {
         if (payload.id === id) setMatch(payload);
@@ -32,10 +37,12 @@ export const MatchDetailPage: React.FC = () => {
   );
 
   const lineups = typeof match.lineups === 'string' ? JSON.parse(match.lineups) : match.lineups;
+  const homeTeam = teams.find(t => t.id === match.home_team_id);
+  const awayTeam = teams.find(t => t.id === match.away_team_id);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-1 duration-150">
-      <ScoreboardBanner match={match} />
+      <ScoreboardBanner match={match} homeTeam={homeTeam} awayTeam={awayTeam} />
       
       {match.stream_url && (
         <div className="relative aspect-video rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(0,255,136,0.15)] group">

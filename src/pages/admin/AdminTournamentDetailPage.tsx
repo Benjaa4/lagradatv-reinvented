@@ -8,6 +8,8 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassModal } from '../../components/ui/GlassModal';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { CustomSwitch } from '../../components/ui/CustomSwitch';
+import { CustomDatePicker } from '../../components/ui/CustomDatePicker';
+import { CustomTimePicker } from '../../components/ui/CustomTimePicker';
 import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Save, Zap, ExternalLink, ShieldAlert, Plus, Minus, Edit2, Play, Trash2, Sliders, Calendar, ListOrdered, GitBranch, Users } from 'lucide-react';
 import { AdminTabs } from '../../components/ui/AdminTabs';
@@ -73,11 +75,17 @@ export const AdminTournamentDetailPage: React.FC = () => {
     }
   };
 
-  const toggleTeam = (teamId: string) => {
+  const toggleTeam = async (teamId: string) => {
     if (!tournament) return;
     const ids = tournament.team_ids || [];
     const newIds = ids.includes(teamId) ? ids.filter(i => i !== teamId) : [...ids, teamId];
-    setTournament({ ...tournament, team_ids: newIds });
+    const updated = { ...tournament, team_ids: newIds };
+    setTournament(updated);
+    try {
+      await updateTournament(updated.id, updated);
+    } catch (e) {
+      toast('Error al guardar equipos', 'error');
+    }
   };
 
   const removeTeamCompletely = async (team: GlobalTeam) => {
@@ -159,10 +167,12 @@ export const AdminTournamentDetailPage: React.FC = () => {
 
     try {
       for (const [tid, s] of Object.entries(stats)) {
+        if (tid === 'TBD' || !tid) continue;
         const teamName = teams.find(t => t.id === tid)?.name || tid;
-        const existing = standings.find(st => st.name === teamName);
+        const existing = standings.find(st => st.team_id === tid || st.name === teamName);
         const data: Partial<TeamStanding> = {
           tournament_id: tournament.id,
+          team_id: tid,
           name: teamName,
           played: s.played,
           won: s.won,
@@ -194,9 +204,16 @@ export const AdminTournamentDetailPage: React.FC = () => {
 
   const handlePenaltyUpdate = async (id: string, penalty: number) => {
     try {
-      await updateStanding(id, { points_penalty: penalty });
+      const standing = standings.find(s => s.id === id);
+      if (!standing) return;
+      const basePoints = (standing.won * 3) + standing.drawn;
+      const adjustedPoints = Math.max(0, basePoints - penalty);
+      await updateStanding(id, { points: adjustedPoints });
       toast('Sanción actualizada', 'success');
-      fetchAll();
+      
+      const newStandings = standings.map(s => s.id === id ? { ...s, points: adjustedPoints, points_penalty: penalty } : s);
+      setStandings(newStandings);
+      if (tournament) setTournament({ ...tournament, standings: newStandings });
     } catch (e) {
       toast('Error al aplicar sanción', 'error');
     }
@@ -220,6 +237,9 @@ export const AdminTournamentDetailPage: React.FC = () => {
 
   const saveMatch = async () => {
     const dataToSave = { ...currentMatch };
+    if (!dataToSave.tournament_id || dataToSave.tournament_id === '') {
+      dataToSave.tournament_id = undefined;
+    }
     if (isWO) {
       dataToSave.home_score = 3;
       dataToSave.away_score = 0;
@@ -231,8 +251,8 @@ export const AdminTournamentDetailPage: React.FC = () => {
       setMatchModalOpen(false);
       fetchAll();
       toast('Partido guardado', 'success');
-    } catch (e) {
-      toast('Error al guardar partido', 'error');
+    } catch (e: any) {
+      toast(`Error al guardar partido: ${e?.message || 'Desconocido'}`, 'error');
     }
   };
 
@@ -465,6 +485,10 @@ export const AdminTournamentDetailPage: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <CustomSelect options={teams.map(t=>({value:t.id,label:t.name}))} value={currentMatch.home_team_id||''} onChange={v=>setCurrentMatch({...currentMatch, home_team_id:v})} placeholder="Local" />
             <CustomSelect options={teams.map(t=>({value:t.id,label:t.name}))} value={currentMatch.away_team_id||''} onChange={v=>setCurrentMatch({...currentMatch, away_team_id:v})} placeholder="Visitante" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <CustomDatePicker value={currentMatch.date||''} onChange={v=>setCurrentMatch({...currentMatch, date:v})} placeholder="Fecha" />
+            <CustomTimePicker value={currentMatch.time||''} onChange={v=>setCurrentMatch({...currentMatch, time:v})} />
           </div>
 
           <div className="grid grid-cols-2 gap-4 items-start">

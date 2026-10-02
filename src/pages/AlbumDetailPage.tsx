@@ -14,8 +14,7 @@ export const AlbumDetailPage: React.FC = () => {
   useEffect(() => {
     if(id) {
       getAlbumById(id).then(a => setAlbum(a || null));
-      // Filtramos los videos que pertenecen a este álbum o simulamos para el demo
-      getVideos().then(v => setVideos(v));
+      getVideos().then(v => setVideos(v.filter(vid => vid.album_id === id)));
     }
   }, [id]);
 

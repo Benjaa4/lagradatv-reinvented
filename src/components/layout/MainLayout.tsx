@@ -2,6 +2,7 @@ import React from 'react';
 import { FloatingNavbar } from './FloatingNavbar';
 import { BottomNav } from './BottomNav';
 import { useSettings } from '../../context/SettingsContext';
+import BackgroundVideo from '../common/BackgroundVideo';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -11,18 +12,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { settings } = useSettings();
   
   return (
-    <div className="min-h-screen flex flex-col selection:bg-primary/30 selection:text-white relative bg-[#090a0f] max-w-full overflow-x-hidden" style={{ '--nav-h': '5rem' } as React.CSSProperties}>
-      {/* Mesh Gradients Dinámicos */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[120px]" />
-        <div className="absolute top-[20%] right-[-10%] w-[35%] h-[35%] rounded-full bg-cyan-500/10 blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] rounded-full bg-violet-600/10 blur-[150px]" />
-      </div>
+    <div className="min-h-screen flex flex-col selection:bg-primary/30 selection:text-white relative bg-transparent max-w-full overflow-x-hidden" style={{ '--nav-h': '5rem' } as React.CSSProperties}>
+      <BackgroundVideo />
 
       <div className="relative z-10 flex flex-col flex-1">
         <FloatingNavbar />
       
-      <main className="flex-1 pt-24 md:pt-32 pb-28 md:pb-0 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 pt-6 md:pt-32 pb-28 md:pb-0 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
         {children}
       </main>
       
